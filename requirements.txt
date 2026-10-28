@@ -1,0 +1,6 @@
+glfw==2.11.0
+moderngl==5.13.0
+numpy==2.5.4
+opencv-python-headless==4.14.0.94
+pillow==13.0.0
+pyglm==2.8.3
