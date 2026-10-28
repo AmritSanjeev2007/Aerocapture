@@ -1,0 +1,5 @@
+.venv/*
+
+# Don't include the assignment brief
+ME22011_Assignment1_Aerocapture.pdf
+
