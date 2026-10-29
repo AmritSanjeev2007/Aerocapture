@@ -8,4 +8,3 @@ if __name__ == "__main__":
     renderer.render()
     renderer.destroy()
 
-    print("Hello World")
