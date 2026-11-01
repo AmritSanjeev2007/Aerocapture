@@ -1,5 +1,25 @@
+# Python virtual environment. Should be setup using requirements.txt on the user's side
 .venv/*
 
 # Don't include the assignment brief
 ME22011_Assignment1_Aerocapture.pdf
+# Don't include rendered assignment report
+report.typ
+report.pdf
 
+# Don't include aerocapture report pdf
+aerocapture.pdf
+# Don't include aerocapture report figures
+report_figures/*
+
+# The compiled C++ calculations (built automatically by calc/native.py)
+calc/native.dll
+calc/native.so
+
+# PyInstaller output
+build/
+dist/
+
+# Python cache files
+calc/__pycache__/
+display/__pycache__/

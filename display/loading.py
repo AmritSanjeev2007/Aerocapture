@@ -6,18 +6,23 @@ import time
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from imgui_bundle import imgui
 from typing import Any, Callable
 
-from .constants import ACCENT_COLOR, CLEAR_COLOR, LOADING_FRAGMENT_SHADER_PATH, SCREEN_VERTEX_SHADER_PATH
+from .constants import (
+    ACCENT_COLOR, CLEAR_COLOR, GUI_SCALE, LOADING_FRAGMENT_SHADER_PATH, SCREEN_VERTEX_SHADER_PATH,
+)
+from .gui import Gui, draw_glowing_text
 from .shaders import create_fullscreen_quad, create_shader_program, set_uniform
-from .text import TextRenderer, TextStyle
 from .textures import MapImage, upload_map_texture
 
 PROGRESS_SMOOTHING = 0.15
 """ The fraction of the remaining distance the bar moves towards the real progress each frame. """
 TITLE = "Aerocapture"
-TITLE_STYLE = TextStyle(size=64, font="bahnschrift.ttf", color=ACCENT_COLOR, glow_radius=12, glow_strength=0.8)
-""" Shares the colour of the loading bar, and glows like its leading edge. """
+TITLE_SIZE = 64.0
+TITLE_GLOW_RADIUS = 10.0
+""" The title shares the colour of the loading bar, and glows like its leading edge. Both are in pixels (before
+``GUI_SCALE``). """
 
 @dataclass(frozen=True)
 class TextureJob:
@@ -30,34 +35,41 @@ class TextureJob:
 class LoadingScreen:
     """ Draws the title and a progress bar in the middle of the window. """
 
-    def __init__(self, context: moderngl.Context) -> None:
+    def __init__(self, context: moderngl.Context, gui: Gui) -> None:
 
         self._program = create_shader_program(
             context=context,
             vert_shader_path=SCREEN_VERTEX_SHADER_PATH,
             frag_shader_path=LOADING_FRAGMENT_SHADER_PATH,
         )
+        set_uniform(self._program, "uFillColor", ACCENT_COLOR)
         self._vao = create_fullscreen_quad(context, self._program)
+        self._gui = gui
         self._start_time = time.perf_counter()
-
-        self._text = TextRenderer(context)
-        self._title = self._text.create(TITLE, TITLE_STYLE)
 
     def draw(self, progress: float, framebuffer_size: tuple[int, int]) -> None:
         """ Draws the loading screen with the bar filled up to ``progress`` (between 0 and 1). """
 
+        self._gui.begin_frame()
+
         set_uniform(self._program, "uResolution", framebuffer_size)
         set_uniform(self._program, "uProgress", progress)
         set_uniform(self._program, "uTime", time.perf_counter() - self._start_time)
-        set_uniform(self._program, "uFillColor", ACCENT_COLOR)
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=4)
 
-        # Just above the bar, which sits in the middle of the window.
-        width, height = framebuffer_size
-        self._text.draw(self._title, (width / 2, height / 2 - 24), framebuffer_size, anchor=(0.5, 1.0))
+        # Just above the bar, which sits in the middle of the window (ImGui measures in window coordinates).
+        width, height = imgui.get_io().display_size
+        size = TITLE_SIZE * GUI_SCALE
+        center = (width / 2, height / 2 - 40 * GUI_SCALE - size / 2)
+        draw_glowing_text(
+            imgui.get_background_draw_list(), self._gui.title_font, size, center,
+            ACCENT_COLOR, TITLE, TITLE_GLOW_RADIUS * GUI_SCALE,
+        )
+
+        self._gui.end_frame()
 
 
-def load_textures(window: Any, context: moderngl.Context, jobs: list[TextureJob],
+def load_textures(window: Any, context: moderngl.Context, gui: Gui, jobs: list[TextureJob],
                   title: str) -> dict[str, moderngl.Texture]:
     """ Loads the textures of all the ``jobs`` while showing a loading screen in the ``window``, and returns them
     by name. The window's ``title`` is restored once done, as the progress is also shown there.
@@ -67,7 +79,7 @@ def load_textures(window: Any, context: moderngl.Context, jobs: list[TextureJob]
 
     Each texture counts as two steps of progress: decoding and uploading. """
 
-    screen = LoadingScreen(context)
+    screen = LoadingScreen(context, gui)
 
     textures: dict[str, moderngl.Texture] = {}
     decoded: list[tuple[str, MapImage]] = []

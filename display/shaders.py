@@ -39,9 +39,7 @@ def set_uniform(program: moderngl.Program, name: str, value: Any) -> None:
     if uniform is None:
         return
 
-    if isinstance(value, (glm.mat3, glm.mat4)):
+    if isinstance(value, (glm.vec3, glm.mat3, glm.mat4)):
         uniform.write(value.to_bytes())
-    elif isinstance(value, glm.vec3):
-        uniform.value = value.to_tuple()
     else:
         uniform.value = value

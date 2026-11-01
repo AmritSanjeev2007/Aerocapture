@@ -1,1 +1,1 @@
-""" The module used to display the planets and orbit trajectory. """
+""" The module responsible for graphical display. """

@@ -50,17 +50,17 @@ class Scene:
     def __init__(self, context: moderngl.Context, titan_texture: moderngl.Texture,
                  saturn_texture: moderngl.Texture | None = None, sky_texture: moderngl.Texture | None = None) -> None:
 
-        self.show_saturn = saturn_texture is not None
-        self.show_skybox = sky_texture is not None
+        self.has_saturn = saturn_texture is not None
+        """ Whether Saturn's texture was loaded, so that it can be shown. """
+        self.has_skybox = sky_texture is not None
+        """ Whether the starfield's texture was loaded, so that it can be shown. """
+        self.show_saturn = self.has_saturn
+        self.show_skybox = self.has_skybox
         self.sun_direction = SUN_DIRECTION
         """ The direction from the scene towards the Sun. """
         self.titan_position = glm.vec3(0.0)
         self.saturn_position = SATURN_DIRECTION * TITAN_ORBIT_RADIUS_KM
         self.sky_exposure = 1.0
-
-        self._titan_texture = titan_texture
-        self._saturn_texture = saturn_texture
-        self._sky_texture = sky_texture
 
         self._program = create_shader_program(
             context=context,
@@ -69,6 +69,24 @@ class Scene:
         )
 
         self._vao = create_fullscreen_quad(context, self._program)
+
+        program = self._program
+        set_uniform(program, "uTitanRadii", glm.vec3(TITAN_RADIUS_KM))
+        set_uniform(program, "uHazeScaleHeight", TITAN_HAZE_SCALE_HEIGHT_KM)
+        set_uniform(program, "uSaturnRadii", glm.vec3(
+            SATURN_EQUATORIAL_RADIUS_KM, SATURN_POLAR_RADIUS_KM, SATURN_EQUATORIAL_RADIUS_KM
+        ))
+        set_uniform(program, "uSaturnRotation", glm.mat3(1.0))
+        set_uniform(program, "uSaturnHazeScaleHeight", SATURN_HAZE_SCALE_HEIGHT_KM)
+        set_uniform(program, "uRingHazeThickness", SATURN_RING_HAZE_THICKNESS_KM)
+        set_uniform(program, "uSkyRotation", _sky_rotation())
+        set_uniform(program, "uSunAngularRadius", SUN_RADIUS_KM / SUN_DISTANCE_KM)
+
+        # Something valid must stay bound to every sampler, even when Saturn or the starfield wasn't loaded.
+        set_uniform(program, "uTitanTexture", 0)
+        set_uniform(program, "uSaturnTexture", 1)
+        set_uniform(program, "uSkyTexture", 2)
+        self._textures = (titan_texture, saturn_texture or titan_texture, sky_texture or titan_texture)
 
     def _titan_rotation(self) -> glm.mat3:
         """ Titan is tidally locked, so its body frame's ``+z`` axis (longitude 0) points towards Saturn. """
@@ -89,33 +107,16 @@ class Scene:
         set_uniform(program, "uCameraPos", camera.position)
         set_uniform(program, "uSunDir", glm.normalize(self.sun_direction))
 
-        set_uniform(program, "uTitanCenter", self.titan_position)
-        set_uniform(program, "uTitanRadii", glm.vec3(TITAN_RADIUS_KM))
-        set_uniform(program, "uTitanRotation", self._titan_rotation())
-        set_uniform(program, "uHazeScaleHeight", TITAN_HAZE_SCALE_HEIGHT_KM)
-        self._titan_texture.use(location=0)
-        set_uniform(program, "uTitanTexture", 0)
-
-        show_saturn = self.show_saturn and self._saturn_texture is not None
-        set_uniform(program, "uShowSaturn", show_saturn)
-        set_uniform(program, "uSaturnCenter", self.saturn_position)
-        set_uniform(program, "uSaturnRadii", glm.vec3(
-            SATURN_EQUATORIAL_RADIUS_KM, SATURN_POLAR_RADIUS_KM, SATURN_EQUATORIAL_RADIUS_KM
-        ))
-        set_uniform(program, "uSaturnRotation", glm.mat3(1.0))
-        set_uniform(program, "uSaturnHazeScaleHeight", SATURN_HAZE_SCALE_HEIGHT_KM)
-        set_uniform(program, "uRingHazeThickness", SATURN_RING_HAZE_THICKNESS_KM)
-        (self._saturn_texture or self._titan_texture).use(location=1)  # Something valid must stay bound.
-        set_uniform(program, "uSaturnTexture", 1)
-
-        show_skybox = self.show_skybox and self._sky_texture is not None
-        set_uniform(program, "uShowSky", show_skybox)
-        set_uniform(program, "uSkyRotation", _sky_rotation())
-        set_uniform(program, "uSkyExposure", self.sky_exposure)
-        (self._sky_texture or self._titan_texture).use(location=2)
-        set_uniform(program, "uSkyTexture", 2)
-
-        set_uniform(program, "uSunAngularRadius", SUN_RADIUS_KM / SUN_DISTANCE_KM)
         set_uniform(program, "uPixelAngle", math.radians(FIELD_OF_VIEW_DEG) / max(framebuffer_size[1], 1))
+
+        set_uniform(program, "uTitanCenter", self.titan_position)
+        set_uniform(program, "uTitanRotation", self._titan_rotation())
+        set_uniform(program, "uShowSaturn", self.show_saturn and self.has_saturn)
+        set_uniform(program, "uSaturnCenter", self.saturn_position)
+        set_uniform(program, "uShowSky", self.show_skybox and self.has_skybox)
+        set_uniform(program, "uSkyExposure", self.sky_exposure)
+
+        for location, texture in enumerate(self._textures):
+            texture.use(location=location)
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=4)
